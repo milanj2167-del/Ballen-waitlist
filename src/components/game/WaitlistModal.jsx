@@ -1,0 +1,206 @@
+import { useState } from 'react'
+import { submitWaitlist, submitGameScore } from '../../lib/supabase'
+import { trackWaitlistLead } from '../../lib/analytics'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
+function validate({ name, email, phone }) {
+  const errors = {}
+  if (!name.trim()) errors.name = 'We need something to call you.'
+  else if (name.trim().length < 2) errors.name = 'Bit short, no? At least 2 characters.'
+
+  if (!email.trim()) errors.email = 'Email please. We promise not to be weird.'
+  else if (!EMAIL_RE.test(email.trim())) errors.email = "That email doesn't look right."
+
+  const cleanPhone = phone.replace(/[\s\-()+]/g, '')
+  if (!phone.trim()) errors.phone = 'Drop your phone or WhatsApp number for launch alerts.'
+  else if (cleanPhone.length < 7 || !/^\d+$/.test(cleanPhone)) {
+    errors.phone = 'Please enter a valid phone number (at least 7 digits).'
+  }
+
+  return errors
+}
+
+export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
+  const [values, setValues] = useState({ name: '', email: '', phone: '', guess: '' })
+  const [errors, setErrors] = useState({})
+  const [submitting, setSubmitting] = useState(false)
+  const [serverError, setServerError] = useState('')
+
+  if (!isOpen) return null
+
+  const onChange = (e) => {
+    const { name, value } = e.target
+    setValues((v) => ({ ...v, [name]: value }))
+    if (errors[name]) setErrors((er) => ({ ...er, [name]: undefined }))
+    if (serverError) setServerError('')
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    const errs = validate(values)
+    setErrors(errs)
+    if (Object.keys(errs).length) return
+
+    setSubmitting(true)
+    setServerError('')
+
+    try {
+      const waitlistRes = await submitWaitlist(values)
+      if (waitlistRes.error) {
+        setServerError(waitlistRes.error.message || 'Could not join waitlist. Try again.')
+        setSubmitting(false)
+        return
+      }
+
+      // Post/replace score with user details
+      await submitGameScore({
+        playerName: values.name.trim(),
+        playerEmail: values.email.trim(),
+        score,
+      })
+
+      trackWaitlistLead({ ...values, source: 'game_unlock_modal' })
+
+      setSubmitting(false)
+      onSuccess?.(values)
+      onClose()
+    } catch (err) {
+      setServerError(err.message || 'Something went wrong. Please try again.')
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="waitlist-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/85 p-4 backdrop-blur-sm"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose()
+      }}
+    >
+      <div className="relative my-auto w-full max-w-md animate-rise rounded-[28px] border-[3px] border-ink bg-paper p-6 shadow-hard sm:p-7 text-left text-ink">
+        {/* Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={submitting}
+          aria-label="Close modal"
+          className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border-2 border-ink bg-paper font-display text-sm font-bold text-ink hover:bg-ballen transition-colors"
+        >
+          ✕
+        </button>
+
+        <span className="inline-block rounded-full border-2 border-ink bg-ballen px-3 py-0.5 font-display text-[11px] uppercase tracking-wider text-ink shadow-[2px_2px_0_0_#111]">
+          🔒 VIP Score Unlock
+        </span>
+
+        <h3 id="waitlist-modal-title" className="mt-2 font-display text-2xl uppercase leading-tight sm:text-3xl">
+          Join the list <br />
+          <span className="text-ballen-shade underline decoration-ballen decoration-[3px] underline-offset-2">
+            to share your score
+          </span>
+        </h3>
+
+        <p className="font-fun mt-1 text-xs font-semibold text-ink/75 sm:text-sm">
+          Lock in your score of <strong className="font-display text-base text-ink">{score}</strong> on the leaderboard and unlock sharing.
+        </p>
+
+        <form noValidate onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <div>
+            <label htmlFor="modal-name" className="block text-[11px] font-bold uppercase tracking-wider text-ink/80">
+              Your Name
+            </label>
+            <input
+              id="modal-name"
+              name="name"
+              type="text"
+              autoComplete="name"
+              placeholder="What do the boys call you?"
+              value={values.name}
+              onChange={onChange}
+              className={`mt-1 w-full rounded-xl border-2 bg-paper px-3.5 py-2 text-sm font-semibold outline-none focus:border-ballen focus:shadow-[2px_2px_0_0_#111] ${
+                errors.name ? 'border-red-600' : 'border-ink'
+              }`}
+            />
+            {errors.name && <p className="mt-1 text-[11px] font-semibold text-red-600">{errors.name}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="modal-email" className="block text-[11px] font-bold uppercase tracking-wider text-ink/80">
+              Email Address
+            </label>
+            <input
+              id="modal-email"
+              name="email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={values.email}
+              onChange={onChange}
+              className={`mt-1 w-full rounded-xl border-2 bg-paper px-3.5 py-2 text-sm font-semibold outline-none focus:border-ballen focus:shadow-[2px_2px_0_0_#111] ${
+                errors.email ? 'border-red-600' : 'border-ink'
+              }`}
+            />
+            {errors.email && <p className="mt-1 text-[11px] font-semibold text-red-600">{errors.email}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="modal-phone" className="block text-[11px] font-bold uppercase tracking-wider text-ink/80">
+              Phone / WhatsApp Number
+            </label>
+            <input
+              id="modal-phone"
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="+91 98765 43210 (launch alert)"
+              value={values.phone}
+              onChange={onChange}
+              className={`mt-1 w-full rounded-xl border-2 bg-paper px-3.5 py-2 text-sm font-semibold outline-none focus:border-ballen focus:shadow-[2px_2px_0_0_#111] ${
+                errors.phone ? 'border-red-600' : 'border-ink'
+              }`}
+            />
+            {errors.phone && <p className="mt-1 text-[11px] font-semibold text-red-600">{errors.phone}</p>}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <label htmlFor="modal-guess" className="block text-[11px] font-bold uppercase tracking-wider text-ink/80">
+                Guess The Product
+              </label>
+              <span className="text-[10px] font-bold text-ink/50">Optional · Win free box</span>
+            </div>
+            <input
+              id="modal-guess"
+              name="guess"
+              type="text"
+              placeholder="What are we dropping?"
+              value={values.guess}
+              onChange={onChange}
+              className="mt-1 w-full rounded-xl border-2 border-ink bg-paper px-3.5 py-2 text-sm font-semibold outline-none focus:border-ballen focus:shadow-[2px_2px_0_0_#111]"
+            />
+          </div>
+
+          {serverError && (
+            <p className="rounded-lg border border-red-600 bg-red-50 p-2 text-xs font-semibold text-red-700">
+              ⚠️ {serverError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border-2 border-ink bg-ballen py-3 font-display text-base uppercase tracking-wider text-ink shadow-[4px_4px_0_0_#111] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#111] disabled:opacity-60"
+          >
+            {submitting ? 'Locking in score...' : "I'm in · Share score →"}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}

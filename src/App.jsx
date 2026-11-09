@@ -5,6 +5,7 @@ import About from './sections/About'
 import Game from './sections/Game'
 import Waitlist from './sections/Waitlist'
 import Footer from './sections/Footer'
+import ErrorBoundary from './components/ErrorBoundary'
 import { initAnalytics } from './lib/analytics'
 
 export default function App() {
@@ -12,7 +13,7 @@ export default function App() {
     initAnalytics()
   }, [])
   return (
-    <>
+    <ErrorBoundary>
       <a
         href="#waitlist"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-ink focus:px-4 focus:py-2 focus:text-ballen"
@@ -27,6 +28,6 @@ export default function App() {
         <Waitlist />
       </main>
       <Footer />
-    </>
+    </ErrorBoundary>
   )
 }

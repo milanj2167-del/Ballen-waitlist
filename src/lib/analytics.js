@@ -84,19 +84,23 @@ function initMetaPixel(pixelId) {
  * Initialize all analytics providers
  */
 export function initAnalytics() {
-  if (isInitialized || typeof window === 'undefined') return
-  isInitialized = true
+  try {
+    if (isInitialized || typeof window === 'undefined') return
+    isInitialized = true
 
-  if (GA_ID) {
-    initGA(GA_ID)
-  } else if (import.meta.env.DEV) {
-    console.info('[Analytics] VITE_GA_MEASUREMENT_ID not set. Set it in .env to enable GA4.')
-  }
+    if (GA_ID) {
+      initGA(GA_ID)
+    } else if (import.meta.env?.DEV) {
+      console.info('[Analytics] VITE_GA_MEASUREMENT_ID not set. Set it in .env to enable GA4.')
+    }
 
-  if (META_PIXEL_ID) {
-    initMetaPixel(META_PIXEL_ID)
-  } else if (import.meta.env.DEV) {
-    console.info('[Analytics] VITE_META_PIXEL_ID not set. Set it in .env to enable Meta Pixel.')
+    if (META_PIXEL_ID) {
+      initMetaPixel(META_PIXEL_ID)
+    } else if (import.meta.env?.DEV) {
+      console.info('[Analytics] VITE_META_PIXEL_ID not set. Set it in .env to enable Meta Pixel.')
+    }
+  } catch (err) {
+    console.warn('[Analytics] Init failed gracefully:', err)
   }
 }
 
@@ -104,25 +108,29 @@ export function initAnalytics() {
  * Generic event tracker that sends to both GA4 and Meta Pixel
  */
 export function trackEvent(gaEventName, gaParams = {}, metaEventName = null, metaParams = {}) {
-  // 1. Google Analytics
-  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-    window.gtag('event', gaEventName, gaParams)
-  } else if (import.meta.env.DEV) {
-    console.debug(`[Analytics:GA] ${gaEventName}`, gaParams)
-  }
-
-  // 2. Meta Pixel
-  if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
-    if (metaEventName) {
-      const isStandard = ['PageView', 'Lead', 'CompleteRegistration', 'ViewContent', 'Contact'].includes(metaEventName)
-      if (isStandard) {
-        window.fbq('track', metaEventName, metaParams)
-      } else {
-        window.fbq('trackCustom', metaEventName, metaParams)
-      }
+  try {
+    // 1. Google Analytics
+    if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+      window.gtag('event', gaEventName, gaParams)
+    } else if (import.meta.env?.DEV) {
+      console.debug(`[Analytics:GA] ${gaEventName}`, gaParams)
     }
-  } else if (import.meta.env.DEV && metaEventName) {
-    console.debug(`[Analytics:Meta] ${metaEventName}`, metaParams)
+
+    // 2. Meta Pixel
+    if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
+      if (metaEventName) {
+        const isStandard = ['PageView', 'Lead', 'CompleteRegistration', 'ViewContent', 'Contact'].includes(metaEventName)
+        if (isStandard) {
+          window.fbq('track', metaEventName, metaParams)
+        } else {
+          window.fbq('trackCustom', metaEventName, metaParams)
+        }
+      }
+    } else if (import.meta.env?.DEV && metaEventName) {
+      console.debug(`[Analytics:Meta] ${metaEventName}`, metaParams)
+    }
+  } catch (err) {
+    console.warn('[Analytics] Track event failed gracefully:', err)
   }
 }
 

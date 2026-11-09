@@ -1,21 +1,18 @@
 /**
- * Pure scoring rules. The backend can re-run `computeRunScore(events)` on the
- * submitted event log to validate a claimed score.
+ * Pure scoring rules.
+ * Each caught element awards strictly 1 point.
  */
-export const POINTS = { standard: 10 }
+export const POINTS = { standard: 1 }
 
 /** Catches within this many seconds of the previous one keep the combo alive. */
 export const COMBO_WINDOW = 0.9
 
-export function comboMultiplier(combo) {
-  if (combo >= 20) return 3
-  if (combo >= 10) return 2
-  if (combo >= 5) return 1.5
+export function comboMultiplier(_combo) {
   return 1
 }
 
-export function computeCatchPoints(kind, combo) {
-  return Math.round((POINTS[kind] ?? 0) * comboMultiplier(combo))
+export function computeCatchPoints(kind) {
+  return POINTS[kind] ?? 1
 }
 
 /** Advances combo given time since last catch. */

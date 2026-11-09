@@ -262,7 +262,7 @@ export class GameEngine {
 
     this.popups.push({ x: o.x, y: m.y - 14, text: `+${pts}`, life: 0.8, big: false })
     if ([5, 10, 20].includes(this.combo)) {
-      this.popups.push({ x: this.W / 2, y: this.H * 0.35, text: `COMBO x${comboMultiplier(this.combo)}!`, life: 1.1, big: true, center: true })
+      this.popups.push({ x: this.W / 2, y: this.H * 0.35, text: `${this.combo} STREAK! 🔥`, life: 1.1, big: true, center: true })
       this.happy = 0.7
       sound.play('combo')
     } else {

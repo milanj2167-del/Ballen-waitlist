@@ -77,7 +77,7 @@ export default function ContestTerms() {
               5. The prize
             </h2>
             <p className="mt-2 font-semibold leading-relaxed">
-              The winner receives one Ballen Daily Comfort Cream (50 ml), with a retail value of Rs. 299. The prize cannot be exchanged for cash, transferred to anyone else or replaced with another product, except as stated in Section 9.
+              The winner receives one free Ballen product. The prize cannot be exchanged for cash, transferred to anyone else or replaced with another item, except as stated in Section 9.
             </p>
           </section>
 

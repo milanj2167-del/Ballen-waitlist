@@ -133,6 +133,75 @@ export async function fetchTopScores(limit = 3) {
 }
 
 /**
+ * Evaluates whether a given score qualifies for the Top 3 leaderboard,
+ * and what score needs to be beaten if not.
+ */
+export async function evaluateLeaderboardStanding(score, _playerName = '') {
+  const cleanScore = Math.max(0, Math.floor(score))
+
+  try {
+    const { data: topScores } = await fetchTopScores(3)
+    const list = topScores || []
+
+    // If there are open slots in the Top 3 (< 3 players on the board)
+    if (list.length < 3) {
+      let rank = 1
+      if (list[0] && cleanScore < list[0].score) rank = 2
+      if (list[1] && cleanScore < list[1].score) rank = 3
+
+      return {
+        qualifiesTop3: cleanScore > 0,
+        rank: cleanScore > 0 ? rank : null,
+        topScores: list,
+        cutoffScore: 0,
+        pointsNeeded: 1,
+        topScore: list[0]?.score ?? cleanScore,
+      }
+    }
+
+    const rank3Score = list[2]?.score ?? 0
+    const rank1Score = list[0]?.score ?? 0
+
+    if (cleanScore > rank3Score) {
+      let rank = 3
+      if (cleanScore > rank1Score) {
+        rank = 1
+      } else if (cleanScore > (list[1]?.score ?? 0)) {
+        rank = 2
+      }
+
+      return {
+        qualifiesTop3: true,
+        rank,
+        topScores: list,
+        cutoffScore: rank3Score,
+        pointsNeeded: 0,
+        topScore: rank1Score,
+      }
+    }
+
+    // Did not make Top 3
+    return {
+      qualifiesTop3: false,
+      rank: null,
+      topScores: list,
+      cutoffScore: rank3Score,
+      pointsNeeded: (rank3Score - cleanScore) + 1,
+      topScore: rank1Score,
+    }
+  } catch {
+    return {
+      qualifiesTop3: false,
+      rank: null,
+      topScores: [],
+      cutoffScore: 0,
+      pointsNeeded: 1,
+      topScore: 0,
+    }
+  }
+}
+
+/**
  * Submit or REPLACE a game score on the leaderboard.
  * Each player replaces their previous score with their current one.
  */
@@ -146,7 +215,8 @@ export async function submitGameScore({ playerName, playerEmail, score }) {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('ballen_score_submitted'))
     }
-    return { data: { playerName: cleanName, score: cleanScore }, error: null, isMock: true }
+    const standing = await evaluateLeaderboardStanding(cleanScore, cleanName)
+    return { data: { playerName: cleanName, score: cleanScore }, error: null, standing, isMock: true }
   }
 
   // 1. If player has an email, upsert on player_email so it replaces their current score
@@ -168,7 +238,8 @@ export async function submitGameScore({ playerName, playerEmail, score }) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('ballen_score_submitted'))
       }
-      return { data, error: null, isMock: false }
+      const standing = await evaluateLeaderboardStanding(cleanScore, cleanName)
+      return { data, error: null, standing, isMock: false }
     }
     // If player_email column is not yet migrated, fall through to ID-based replacement
   }
@@ -189,7 +260,8 @@ export async function submitGameScore({ playerName, playerEmail, score }) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('ballen_score_submitted'))
       }
-      return { data, error: null, isMock: false }
+      const standing = await evaluateLeaderboardStanding(cleanScore, cleanName)
+      return { data, error: null, standing, isMock: false }
     }
   }
 
@@ -212,7 +284,8 @@ export async function submitGameScore({ playerName, playerEmail, score }) {
     window.dispatchEvent(new Event('ballen_score_submitted'))
   }
 
-  return { data, error, isMock: false }
+  const standing = await evaluateLeaderboardStanding(cleanScore, cleanName)
+  return { data, error, standing, isMock: false }
 }
 
 /**

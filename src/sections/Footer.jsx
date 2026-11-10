@@ -10,7 +10,13 @@ export default function Footer() {
             <p className="max-w-xs text-lg text-paper/70">Fresh, dry, happy boys. Dropping soon.</p>
           </div>
           <nav aria-label="Footer" className="flex flex-wrap gap-x-8 gap-y-3 text-sm font-semibold uppercase tracking-widest">
-            <a href="#" aria-label="Ballen on Instagram (coming soon)" className="inline-flex items-center gap-2 hover:text-ballen">
+            <a
+              href="https://www.instagram.com/ballen.in?dlrf=MTAxcWJicGVnZnZpMQ=="
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Ballen on Instagram"
+              className="inline-flex items-center gap-2 hover:text-ballen"
+            >
               <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="3" width="18" height="18" rx="5" />
                 <circle cx="12" cy="12" r="4" />

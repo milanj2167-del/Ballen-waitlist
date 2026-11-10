@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { fetchTopScores, subscribeToLeaderboard, isSupabaseConfigured } from '../../lib/supabase'
+import { fetchTopScores, subscribeToLeaderboard, isSupabaseConfigured, getStoredUser } from '../../lib/supabase'
 
 const DEMO_ENTRIES = [
   { rank: 1, name: 'Player One', score: 0 },
@@ -45,6 +45,11 @@ export default function Leaderboard() {
     }
     window.addEventListener('ballen_score_submitted', handleLocalSubmit)
 
+    // Periodic live refresh every 10 seconds for real-time multiplayer updates
+    const pollId = setInterval(() => {
+      loadScores()
+    }, 10000)
+
     // Listen for Supabase Realtime changes across any client
     const unsubscribe = subscribeToLeaderboard(() => {
       loadScores()
@@ -52,11 +57,14 @@ export default function Leaderboard() {
 
     return () => {
       window.removeEventListener('ballen_score_submitted', handleLocalSubmit)
+      clearInterval(pollId)
       unsubscribe()
     }
   }, [])
 
   const topEntries = entries.slice(0, 3)
+  const storedUser = typeof window !== 'undefined' ? getStoredUser() : null
+  const currentUserName = (storedUser?.name || '').trim().toLowerCase()
 
   return (
     <div id="leaderboard" className="scroll-mt-28 w-full max-w-full overflow-hidden rounded-[24px] border-[3px] border-ink bg-paper shadow-[4px_4px_0_0_#111] sm:rounded-[28px] sm:shadow-hard">
@@ -98,7 +106,14 @@ export default function Leaderboard() {
                 </span>
               </td>
               <td className="px-2 py-3.5">
-                <div className="font-semibold text-ink text-sm sm:text-base leading-snug">{e.name}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-ink text-sm sm:text-base leading-snug">
+                  <span>{e.name}</span>
+                  {currentUserName && e.name.trim().toLowerCase() === currentUserName && (
+                    <span className="rounded-full bg-ballen border border-ink px-2 py-0.5 text-[9px] font-black uppercase text-ink shadow-[1px_1px_0_0_#111]">
+                      You
+                    </span>
+                  )}
+                </div>
                 {e.rank === 1 && (
                   <div className="mt-1">
                     <span className="inline-block whitespace-nowrap rounded-full bg-ink px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-ballen shadow-[1px_1px_0_0_#fff]">
@@ -115,10 +130,16 @@ export default function Leaderboard() {
         </tbody>
       </table>
 
-      {!isLive && (
+      {!isLive ? (
         <p className="border-t-2 border-ink/10 px-5 py-4 text-center text-sm text-ink/60 md:px-7">
           Live scores appear here once scores are posted. Your name could be up top.
         </p>
+      ) : (
+        <div className="border-t-2 border-dashed border-ink/15 bg-paper/60 px-4 py-3 text-center text-xs font-semibold text-ink/75 sm:px-6">
+          <p>
+            ⚡ Scored less than Top 3? <span className="font-bold text-ink">Beat Rank #3</span> to claim your spot on the live board!
+          </p>
+        </div>
       )}
     </div>
   )

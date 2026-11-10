@@ -59,6 +59,7 @@ export default function FeedTheBoys() {
   const [soundOn, setSoundOn] = useState(() => getSoundPref())
   const [toast, setToast] = useState('')
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false)
+  const [standingFeedback, setStandingFeedback] = useState(null)
 
   useEffect(() => {
     sound.enabled = soundOn
@@ -97,6 +98,7 @@ export default function FeedTheBoys() {
     sound.unlock()
     sound.play('start')
     setResult(null)
+    setStandingFeedback(null)
     setScreen('playing')
     engineRef.current?.start()
     wrapRef.current?.focus({ preventScroll: true })
@@ -185,11 +187,14 @@ export default function FeedTheBoys() {
     // Already on waitlist: update/replace their current score on the leaderboard
     setToast('Updating leaderboard...')
     try {
-      await submitGameScore({
+      const res = await submitGameScore({
         playerName: storedUser.name,
         playerEmail: storedUser.email,
         score: currentScore,
       })
+      if (res?.standing) {
+        setStandingFeedback(res.standing)
+      }
     } catch {}
 
     await triggerNativeShare(currentScore)
@@ -325,6 +330,51 @@ export default function FeedTheBoys() {
             </div>
           )}
 
+          {/* Standing Feedback Banner when score is shared */}
+          {standingFeedback && (
+            <div
+              className={`my-2.5 rounded-2xl border-2 p-3 text-center shadow-[3px_3px_0_0_#111] animate-rise ${
+                standingFeedback.qualifiesTop3
+                  ? 'border-ballen bg-ink/95 shadow-[3px_3px_0_0_#F8D928]'
+                  : 'border-amber-400 bg-ink/95 shadow-[3px_3px_0_0_#F59E0B]'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-1.5 font-display text-sm uppercase tracking-wider">
+                <span>{standingFeedback.qualifiesTop3 ? '🏆' : '⚡'}</span>
+                <span className={standingFeedback.qualifiesTop3 ? 'text-ballen' : 'text-amber-300'}>
+                  {standingFeedback.qualifiesTop3
+                    ? standingFeedback.rank === 1
+                      ? "You're Rank #1 on the Board!"
+                      : `You Made Top 3 · Rank #${standingFeedback.rank}!`
+                    : 'Score Saved · Not in Top 3 Yet'}
+                </span>
+              </div>
+              <p className="mt-1 font-fun text-xs font-semibold leading-snug text-paper">
+                {standingFeedback.qualifiesTop3 ? (
+                  standingFeedback.rank === 1
+                    ? "Holding the top spot for the launch giveaway!"
+                    : `Live on the board! Beat ${standingFeedback.topScore} to take #1!`
+                ) : (
+                  <>
+                    You scored <strong className="text-ballen">{result.score}</strong>. To get on the live leaderboard, you must beat the Top 3 score of <strong className="text-paper">{standingFeedback.cutoffScore}</strong> (<span className="text-amber-300 font-bold">+{standingFeedback.pointsNeeded} pts</span> needed)!
+                  </>
+                )}
+              </p>
+              {standingFeedback.qualifiesTop3 ? (
+                <a
+                  href="#leaderboard"
+                  className="mt-1.5 inline-block text-[11px] font-bold uppercase tracking-wider text-ballen underline underline-offset-2 hover:text-paper"
+                >
+                  View live leaderboard ↓
+                </a>
+              ) : (
+                <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-ballen">
+                  Play again to beat the top scores and claim your spot!
+                </p>
+              )}
+            </div>
+          )}
+
           <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-paper/50">
             Personal best: {best} · saved on this device only
           </p>
@@ -346,7 +396,10 @@ export default function FeedTheBoys() {
         isOpen={isWaitlistModalOpen}
         onClose={() => setIsWaitlistModalOpen(false)}
         score={result?.score ?? 0}
-        onSuccess={() => {
+        onSuccess={(_values, standing) => {
+          if (standing) {
+            setStandingFeedback(standing)
+          }
           triggerNativeShare(result?.score ?? 0)
         }}
       />

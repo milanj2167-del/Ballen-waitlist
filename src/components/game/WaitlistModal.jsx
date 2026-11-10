@@ -54,7 +54,7 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
       }
 
       // Post/replace score with user details
-      await submitGameScore({
+      const scoreRes = await submitGameScore({
         playerName: values.name.trim(),
         playerEmail: values.email.trim(),
         score,
@@ -63,7 +63,7 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
       trackWaitlistLead({ ...values, source: 'game_unlock_modal' })
 
       setSubmitting(false)
-      onSuccess?.(values)
+      onSuccess?.(values, scoreRes?.standing)
       onClose()
     } catch (err) {
       setServerError(err.message || 'Something went wrong. Please try again.')

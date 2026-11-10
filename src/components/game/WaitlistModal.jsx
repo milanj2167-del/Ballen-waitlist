@@ -60,11 +60,12 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
     setServerError('')
 
     try {
-      // 1. Submit/save waitlist lead
-      try {
-        await submitWaitlist(values)
-      } catch (wErr) {
-        console.warn('Waitlist submission notice:', wErr)
+      // 1. Submit/verify waitlist account
+      const waitlistRes = await submitWaitlist(values)
+      if (waitlistRes.error) {
+        setServerError(waitlistRes.error.message || 'Could not verify account.')
+        setSubmitting(false)
+        return
       }
 
       // 2. Post or replace game score on the live leaderboard

@@ -64,10 +64,15 @@ export function saveStoredUser(user) {
  * Submit waitlist registration.
  */
 export async function submitWaitlist({ name, email, phone, guess }) {
+  const cleanName = name.trim()
+  const cleanEmail = email.trim().toLowerCase()
+  const cleanPhone = phone.trim()
+  const cleanPhoneDigits = cleanPhone.replace(/\D/g, '')
+
   const cleanUser = {
-    name: name.trim(),
-    email: email.trim().toLowerCase(),
-    phone: phone.trim(),
+    name: cleanName,
+    email: cleanEmail,
+    phone: cleanPhone,
     guess: guess?.trim() || null,
   }
 
@@ -76,22 +81,94 @@ export async function submitWaitlist({ name, email, phone, guess }) {
   if (!isSupabaseConfigured || !supabase) {
     // Simulated offline/dev fallback
     await new Promise((res) => setTimeout(res, 500))
-    return { data: cleanUser, error: null, isMock: true }
+    return { data: cleanUser, error: null, isMock: true, isNew: true }
   }
 
+  // 1. Verify single account rule: check if email or phone already exists
+  try {
+    const { data: existing, error: checkError } = await supabase
+      .from('waitlist')
+      .select('id, name, email, phone, guess')
+      .or(`email.ilike.${cleanEmail},phone.ilike.%${cleanPhoneDigits.slice(-10)}%`)
+      .limit(5)
+
+    if (!checkError && existing && existing.length > 0) {
+      const emailMatch = existing.find((e) => (e.email || '').trim().toLowerCase() === cleanEmail)
+      const phoneMatch = existing.find(
+        (e) => (e.phone || '').replace(/\D/g, '') === cleanPhoneDigits
+      )
+
+      // Conflict: phone registered to a different email
+      if (phoneMatch && phoneMatch.email && phoneMatch.email.trim().toLowerCase() !== cleanEmail) {
+        return {
+          data: null,
+          error: {
+            message: 'This phone number is already registered under another email. Only 1 account is permitted per number.',
+          },
+          isMock: false,
+        }
+      }
+
+      // Existing verified account! Update their profile details
+      const accountToUpdate = emailMatch || phoneMatch
+      if (accountToUpdate) {
+        await supabase
+          .from('waitlist')
+          .update({
+            name: cleanName,
+            phone: cleanPhone,
+            guess: cleanUser.guess || accountToUpdate.guess,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', accountToUpdate.id)
+
+        saveStoredUser({
+          ...accountToUpdate,
+          name: cleanName,
+          phone: cleanPhone,
+          guess: cleanUser.guess || accountToUpdate.guess,
+        })
+
+        return {
+          data: { ...accountToUpdate, isExisting: true },
+          error: null,
+          isExisting: true,
+          message: "You're already on the VIP waitlist! Welcome back.",
+          isMock: false,
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Waitlist] Account check notice:', err)
+  }
+
+  // 2. Brand new account: insert into waitlist
   const { data, error } = await supabase
     .from('waitlist')
     .insert([cleanUser])
+    .select()
 
   if (error) {
-    // If email is already registered, treat gracefully as already saved
+    // Handled duplicate index violation (23505) in PostgreSQL
     if (error.code === '23505') {
-      return { data: { ...cleanUser, isExisting: true }, error: null, isMock: false }
+      return {
+        data: { ...cleanUser, isExisting: true },
+        error: null,
+        isExisting: true,
+        message: "You're already on the VIP waitlist! Welcome back.",
+        isMock: false,
+      }
     }
     return { data: null, error, isMock: false }
   }
 
-  return { data, error: null, isMock: false }
+  return {
+    data: data ? data[0] : cleanUser,
+    error: null,
+    isNew: true,
+    message: 'Spot confirmed! Welcome to Ballen.',
+    isMock: false,
+  }
 }
 
 const LOCAL_SCORES_KEY = 'ballen_local_submitted_scores'
@@ -174,14 +251,15 @@ export async function fetchTopScores(limit = 3) {
     }
   }
 
-  // Merge with locally saved scores on this device
+  // When Supabase has scores, use Supabase rows as the single source of truth across all devices!
+  // If Supabase returned 0 rows (e.g. offline/dev), fallback to local rows.
   const localRows = getLocalScores()
-  const combined = [...localRows, ...supabaseRows]
+  const rows = supabaseRows.length > 0 ? supabaseRows : localRows
 
   // Guarantee each player/account only occupies 1 spot (highest score)
   // Match by email OR phone OR name
   const list = []
-  for (const row of combined) {
+  for (const row of rows) {
     const rEmail = (row.player_email || '').trim().toLowerCase()
     const rPhone = (row.player_phone || '').replace(/\D/g, '')
     const rName = (row.player_name || '').trim().toLowerCase()

@@ -259,7 +259,7 @@ export default function Waitlist() {
             </div>
 
             <p className="mt-5 text-center font-fun text-xs font-semibold text-ink/65">
-              We'll only message you about the Ballen launch. No spam. We never sell or share your details.
+              No spam. We never sell or share your details.
             </p>
           </form>
         </Reveal>

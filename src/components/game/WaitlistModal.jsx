@@ -283,7 +283,7 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
           </button>
 
           <p className="mt-2 text-center text-[10px] font-semibold text-ink/65 leading-tight">
-            We'll only message you about the Ballen launch. No spam. We never sell or share your details.
+            No spam. We never sell or share your details.
           </p>
         </form>
       </div>

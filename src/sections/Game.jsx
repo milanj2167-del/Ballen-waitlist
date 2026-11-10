@@ -31,10 +31,16 @@ export default function Game() {
         {/* Game Console + Leaderboard & Prize Card Grid */}
         <div className="mt-8 flex flex-col items-center justify-center gap-6 lg:grid lg:grid-cols-12 lg:items-start">
           {/* Left: Arcade Game Screen */}
-          <Reveal className="flex w-full max-w-full justify-center lg:col-span-7">
+          <Reveal className="flex w-full max-w-full flex-col items-center justify-center lg:col-span-7">
             <GameContainer>
               <FeedTheBoys />
             </GameContainer>
+            <p className="mt-3 text-center font-fun text-[11px] font-semibold text-ink/65 sm:text-xs">
+              Free to play. 18+ and India only. Rank 1st to win a free Ballen Daily Comfort Cream.{' '}
+              <a href="/contest-terms" className="underline font-bold text-ink hover:text-ballen-shade">
+                See Contest Terms.
+              </a>
+            </p>
           </Reveal>
 
           {/* Right: Leaderboard & Highly Visible Prize Rules */}
@@ -86,6 +92,13 @@ export default function Game() {
                   </p>
                 </div>
               </div>
+
+              <p className="mt-4 border-t border-ink/20 pt-3 text-center font-fun text-xs font-semibold text-ink/80">
+                Free to play. 18+ and India only. Rank 1st to win a free Ballen Daily Comfort Cream.{' '}
+                <a href="/contest-terms" className="underline font-bold text-ink hover:text-ink/70">
+                  See Contest Terms.
+                </a>
+              </p>
             </div>
           </Reveal>
         </div>

@@ -16,6 +16,8 @@ create table if not exists public.waitlist (
 -- Ensure columns exist
 alter table public.waitlist add column if not exists phone text;
 alter table public.waitlist add column if not exists guess text;
+alter table public.waitlist add column if not exists consent boolean default true;
+alter table public.waitlist add column if not exists consent_at timestamp with time zone default timezone('utc'::text, now());
 alter table public.waitlist add column if not exists updated_at timestamp with time zone default timezone('utc'::text, now());
 
 -- Clean up any duplicate test rows before applying unique constraints (keeps latest)

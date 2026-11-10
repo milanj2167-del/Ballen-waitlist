@@ -6,7 +6,7 @@ const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_-sddQiHNwpdgXmLst3ff_Q_QcNHchj
 function sanitizeSupabaseUrl(url) {
   if (!url) return DEFAULT_SUPABASE_URL
   // Strip out brackets, quotes, whitespace
-  let clean = url.replace(/[\[\]"'\s]/g, '')
+  let clean = url.replace(/[[\]"'\s]/g, '')
   // Fix transposition typo 'kwpr' -> 'kwrp'
   if (clean.includes('wcymvkwprdbuofaysjoi')) {
     clean = clean.replace('wcymvkwprdbuofaysjoi', 'wcymvkwrpdbuofaysjoi')
@@ -22,7 +22,7 @@ function sanitizeSupabaseUrl(url) {
 
 function sanitizeSupabaseKey(key) {
   if (!key) return DEFAULT_SUPABASE_ANON_KEY
-  let clean = key.replace(/[\[\]"'\s]/g, '')
+  let clean = key.replace(/[[\]"'\s]/g, '')
   if (clean.includes('sddQ1hN')) {
     clean = clean.replace('sddQ1hN', 'sddQiHN')
   }
@@ -95,17 +95,21 @@ export function saveStoredUser(user) {
 /**
  * Submit waitlist registration.
  */
-export async function submitWaitlist({ name, email, phone, guess }) {
+export async function submitWaitlist({ name, email, phone, guess, consent, consent_at }) {
   const cleanName = name.trim()
   const cleanEmail = email.trim().toLowerCase()
   const cleanPhone = phone.trim()
   const cleanPhoneDigits = cleanPhone.replace(/\D/g, '')
+  const consentAt = consent_at || new Date().toISOString()
+  const cleanConsent = consent !== undefined ? !!consent : true
 
   const cleanUser = {
     name: cleanName,
     email: cleanEmail,
     phone: cleanPhone,
     guess: guess?.trim() || null,
+    consent: cleanConsent,
+    consent_at: consentAt,
   }
 
   saveStoredUser(cleanUser)
@@ -144,15 +148,32 @@ export async function submitWaitlist({ name, email, phone, guess }) {
       // Existing verified account! Update their profile details
       const accountToUpdate = emailMatch || phoneMatch
       if (accountToUpdate) {
-        await supabase
+        const updatePayload = {
+          name: cleanName,
+          phone: cleanPhone,
+          guess: cleanUser.guess || accountToUpdate.guess,
+          consent: cleanConsent,
+          consent_at: consentAt,
+          updated_at: new Date().toISOString(),
+        }
+
+        let upRes = await supabase
           .from('waitlist')
-          .update({
-            name: cleanName,
-            phone: cleanPhone,
-            guess: cleanUser.guess || accountToUpdate.guess,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq('id', accountToUpdate.id)
+
+        if (upRes.error) {
+          // Retry without consent columns if database columns do not exist yet
+          await supabase
+            .from('waitlist')
+            .update({
+              name: cleanName,
+              phone: cleanPhone,
+              guess: cleanUser.guess || accountToUpdate.guess,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', accountToUpdate.id)
+        }
 
         saveStoredUser({
           ...accountToUpdate,
@@ -175,10 +196,23 @@ export async function submitWaitlist({ name, email, phone, guess }) {
   }
 
   // 2. Brand new account: insert into waitlist
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('waitlist')
     .insert([cleanUser])
     .select()
+
+  if (error && (error.message?.includes('consent') || error.code === '42703')) {
+    // Retry without consent columns if table doesn't have them yet
+    const basicUser = {
+      name: cleanName,
+      email: cleanEmail,
+      phone: cleanPhone,
+      guess: cleanUser.guess,
+    }
+    const fallbackRes = await supabase.from('waitlist').insert([basicUser]).select()
+    data = fallbackRes.data
+    error = fallbackRes.error
+  }
 
   if (error) {
     // Handled duplicate index violation (23505) in PostgreSQL

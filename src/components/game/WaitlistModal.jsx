@@ -4,7 +4,7 @@ import { trackWaitlistLead } from '../../lib/analytics'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
-function validate({ name, email, phone }) {
+function validate({ name, email, phone, consent }) {
   const errors = {}
   if (!name.trim()) errors.name = 'We need something to call you.'
   else if (name.trim().length < 2) errors.name = 'Bit short, no? At least 2 characters.'
@@ -18,11 +18,16 @@ function validate({ name, email, phone }) {
     errors.phone = 'Please enter a valid phone number (at least 7 digits).'
   }
 
+  if (!consent) {
+    errors.consent = 'Please tick the box to join the waitlist.'
+  }
+
   return errors
 }
 
 export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
   const [values, setValues] = useState({ name: '', email: '', phone: '', guess: '' })
+  const [consent, setConsent] = useState(false)
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState('')
@@ -36,6 +41,7 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
         phone: stored?.phone || '',
         guess: stored?.guess || '',
       })
+      setConsent(false)
       setErrors({})
       setServerError('')
     }
@@ -52,16 +58,22 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const errs = validate(values)
+    const errs = validate({ ...values, consent })
     setErrors(errs)
     if (Object.keys(errs).length) return
 
     setSubmitting(true)
     setServerError('')
 
+    const consentAt = new Date().toISOString()
+
     try {
       // 1. Submit/verify waitlist account
-      const waitlistRes = await submitWaitlist(values)
+      const waitlistRes = await submitWaitlist({
+        ...values,
+        consent: true,
+        consent_at: consentAt,
+      })
       if (waitlistRes.error) {
         setServerError(waitlistRes.error.message || 'Could not verify account.')
         setSubmitting(false)
@@ -74,6 +86,7 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
         playerEmail: values.email.trim(),
         playerPhone: values.phone.trim(),
         score,
+        consent_at: consentAt,
       })
 
       // 3. Analytics
@@ -90,6 +103,7 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
           playerEmail: values.email.trim(),
           playerPhone: values.phone.trim(),
           score,
+          consent_at: consentAt,
         })
         onSuccess?.(values, scoreRes?.standing)
       } catch {}
@@ -223,6 +237,37 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
             />
           </div>
 
+          {/* Consent Checkbox (Required) */}
+          <div className="pt-1">
+            <label className="flex items-start gap-2.5 cursor-pointer select-none text-[11px] sm:text-xs font-medium text-ink leading-snug">
+              <input
+                type="checkbox"
+                id="modal-consent"
+                checked={consent}
+                onChange={(e) => {
+                  setConsent(e.target.checked)
+                  if (errors.consent) setErrors((er) => ({ ...er, consent: undefined }))
+                }}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-2 border-ink text-ink accent-ink focus:ring-1 focus:ring-ballen cursor-pointer"
+              />
+              <span>
+                I agree to the{' '}
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold underline decoration-1 underline-offset-2 hover:text-ballen-shade"
+                >
+                  Privacy Policy
+                </a>{' '}
+                and I consent to Ballen contacting me by email, SMS and WhatsApp about its launch.
+              </span>
+            </label>
+            {errors.consent && (
+              <p className="mt-1 text-[11px] font-semibold text-red-600">{errors.consent}</p>
+            )}
+          </div>
+
           {serverError && (
             <p className="rounded-lg border border-red-600 bg-red-50 p-2 text-xs font-semibold text-red-700">
               ⚠️ {serverError}
@@ -232,10 +277,14 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
           <button
             type="submit"
             disabled={submitting}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border-2 border-ink bg-ballen py-3 font-display text-base uppercase tracking-wider text-ink shadow-[4px_4px_0_0_#111] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#111] disabled:opacity-60"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border-2 border-ink bg-ballen py-3 font-display text-base uppercase tracking-wider text-ink shadow-[4px_4px_0_0_#111] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#111] disabled:opacity-60"
           >
             {submitting ? 'Locking in score...' : 'Lock in & Share score →'}
           </button>
+
+          <p className="mt-2 text-center text-[10px] font-semibold text-ink/65 leading-tight">
+            We'll only message you about the Ballen launch. No spam. We never sell or share your details.
+          </p>
         </form>
       </div>
     </div>

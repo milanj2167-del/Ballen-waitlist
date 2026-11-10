@@ -6,7 +6,7 @@ import { trackWaitlistLead } from '../lib/analytics'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
-function validate({ name, email, phone }) {
+function validate({ name, email, phone, consent }) {
   const errors = {}
   if (!name.trim()) errors.name = 'We need something to call you.'
   else if (name.trim().length < 2) errors.name = 'Bit short, no? At least 2 characters.'
@@ -17,6 +17,10 @@ function validate({ name, email, phone }) {
   const cleanPhone = phone.replace(/[\s\-()+]/g, '')
   if (!phone.trim()) errors.phone = 'Drop your phone or WhatsApp number for VIP launch alerts.'
   else if (cleanPhone.length < 7 || !/^\d+$/.test(cleanPhone)) errors.phone = 'Please enter a valid phone number (at least 7 digits).'
+
+  if (!consent) {
+    errors.consent = 'Please tick the box to join the waitlist.'
+  }
 
   // 'guess' is strictly optional, so no error generated!
   return errors
@@ -59,8 +63,9 @@ function Field({ id, label, badge, error, ...props }) {
  */
 export default function Waitlist() {
   const [values, setValues] = useState({ name: '', email: '', phone: '', guess: '' })
+  const [consent, setConsent] = useState(false)
   const [errors, setErrors] = useState({})
-  const [status, setStatus] = useState('idle') // idle | submitting | success | error
+  const [status, setStatus] = useState('idle') // idle | submitting | success | error | already_saved
   const [errorMessage, setErrorMessage] = useState('')
 
   const onChange = (e) => {
@@ -72,10 +77,11 @@ export default function Waitlist() {
 
   const onSubmit = async (e) => {
     e.preventDefault()
-    const errs = validate(values)
+    const errs = validate({ ...values, consent })
     setErrors(errs)
     if (Object.keys(errs).length) {
-      document.getElementById(Object.keys(errs)[0])?.focus()
+      const firstKey = Object.keys(errs)[0]
+      document.getElementById(firstKey === 'consent' ? 'waitlist-consent' : firstKey)?.focus()
       return
     }
 
@@ -83,7 +89,11 @@ export default function Waitlist() {
     setErrorMessage('')
 
     try {
-      const { data, error } = await submitWaitlist(values)
+      const { data, error } = await submitWaitlist({
+        ...values,
+        consent: true,
+        consent_at: new Date().toISOString(),
+      })
       if (error) {
         setStatus('error')
         setErrorMessage(error.message || 'Could not save your spot. Please try again.')
@@ -181,12 +191,44 @@ export default function Waitlist() {
               />
             </div>
 
+            {/* Legal Consent Checkbox (Required) */}
+            <div className="mt-5">
+              <label className="flex items-start gap-3 cursor-pointer select-none text-xs sm:text-sm font-semibold text-ink/90 leading-snug">
+                <input
+                  type="checkbox"
+                  id="waitlist-consent"
+                  name="consent"
+                  checked={consent}
+                  onChange={(e) => {
+                    setConsent(e.target.checked)
+                    if (errors.consent) setErrors((er) => ({ ...er, consent: undefined }))
+                  }}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-ink text-ink accent-ink focus:ring-2 focus:ring-ballen cursor-pointer"
+                />
+                <span>
+                  I agree to the{' '}
+                  <a
+                    href="/privacy"
+                    className="font-bold underline decoration-2 underline-offset-2 hover:text-ballen-shade transition-colors"
+                  >
+                    Privacy Policy
+                  </a>{' '}
+                  and I consent to Ballen contacting me by email, SMS and WhatsApp about its launch.
+                </span>
+              </label>
+              {errors.consent && (
+                <p id="waitlist-consent-error" role="alert" className="mt-1.5 text-xs font-semibold text-red-700">
+                  {errors.consent}
+                </p>
+              )}
+            </div>
+
             <Button
               type="submit"
               variant="ink"
               id="waitlist-submit"
               disabled={status === 'submitting'}
-              className="mt-7 w-full !py-4.5 !text-2xl !shadow-[6px_6px_0_0_#F8D928] hover:!shadow-[2px_2px_0_0_#F8D928] disabled:opacity-75"
+              className="mt-6 w-full !py-4.5 !text-2xl !shadow-[6px_6px_0_0_#F8D928] hover:!shadow-[2px_2px_0_0_#F8D928] disabled:opacity-75"
             >
               {status === 'submitting' ? 'Locking in spot...' : "I'm in"}
             </Button>
@@ -195,11 +237,9 @@ export default function Waitlist() {
               {(status === 'success' || status === 'already_saved') && (
                 <div className="mt-5 rounded-2xl border-2 border-dashed border-ink bg-ballen/40 p-4 text-sm font-semibold text-ink animate-rise">
                   <p className="font-bold text-base">
-                    {status === 'already_saved'
-                      ? `🎉 You're already on the VIP list, ${values.name.trim().split(' ')[0]}!`
-                      : `🎉 You're on the list, ${values.name.trim().split(' ')[0]}!`}
+                    🎉 You're on the list. We'll let you know as soon as Ballen launches.
                   </p>
-                  <p className="mt-1">
+                  <p className="mt-1 text-xs sm:text-sm text-ink/80">
                     We'll text <strong>{values.phone}</strong> and email <strong>{values.email}</strong> the second the drop goes live.
                   </p>
                   {values.guess.trim() && (
@@ -218,8 +258,8 @@ export default function Waitlist() {
               )}
             </div>
 
-            <p className="mt-5 text-xs text-ink/50">
-              *By joining you agree to our <a href="#" className="underline">Privacy Policy</a>. Unsubscribe anytime.
+            <p className="mt-5 text-center font-fun text-xs font-semibold text-ink/65">
+              We'll only message you about the Ballen launch. No spam. We never sell or share your details.
             </p>
           </form>
         </Reveal>

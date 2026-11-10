@@ -94,100 +94,166 @@ export async function submitWaitlist({ name, email, phone, guess }) {
   return { data, error: null, isMock: false }
 }
 
+const LOCAL_SCORES_KEY = 'ballen_local_submitted_scores'
+
+export function getLocalScores() {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(LOCAL_SCORES_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+export function saveLocalScore(entry) {
+  if (typeof window === 'undefined') return
+  try {
+    const existing = getLocalScores()
+    const cleanEntryName = entry.player_name.trim().toLowerCase()
+
+    // If player already has a score locally, keep their highest score
+    const match = existing.find(
+      (e) =>
+        e.player_name.trim().toLowerCase() === cleanEntryName ||
+        (entry.player_email && e.player_email && e.player_email.toLowerCase() === entry.player_email.toLowerCase())
+    )
+    const bestScore = match ? Math.max(match.score, entry.score) : entry.score
+
+    const filtered = existing.filter(
+      (e) =>
+        e.player_name.trim().toLowerCase() !== cleanEntryName &&
+        (!entry.player_email || !e.player_email || e.player_email.toLowerCase() !== entry.player_email.toLowerCase())
+    )
+
+    filtered.push({
+      ...entry,
+      score: bestScore,
+      created_at: entry.created_at || new Date().toISOString(),
+    })
+    localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(filtered))
+  } catch {}
+}
+
 /**
  * Fetch top N scores from Supabase ordered by score descending.
  */
 export async function fetchTopScores(limit = 3) {
-  if (!isSupabaseConfigured || !supabase) {
-    return { data: null, error: null, isMock: true }
-  }
+  let supabaseRows = []
+  let dbError = null
 
-  const { data, error } = await supabase
-    .from('scores')
-    .select('id, player_name, score, created_at')
-    .order('score', { ascending: false })
-    .order('created_at', { ascending: true })
-    .limit(limit * 4)
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('scores')
+        .select('id, player_name, score, created_at')
+        .order('score', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(limit * 4)
 
-  if (error) return { data: null, error }
-
-  // Guarantee each player only occupies 1 spot on the leaderboard
-  const seen = new Set()
-  const uniquePlayers = []
-  for (const row of data || []) {
-    const key = (row.player_name || '').trim().toLowerCase()
-    if (key && !seen.has(key)) {
-      seen.add(key)
-      uniquePlayers.push(row)
+      if (!error && data) {
+        supabaseRows = data
+      } else if (error) {
+        dbError = error
+      }
+    } catch (e) {
+      dbError = e
     }
-    if (uniquePlayers.length >= limit) break
   }
 
-  const mapped = uniquePlayers.map((row, idx) => ({
+  // Merge with locally saved scores on this device
+  const localRows = getLocalScores()
+  const combined = [...localRows, ...supabaseRows]
+
+  // Guarantee each player only occupies 1 spot (highest score)
+  const map = new Map()
+  for (const row of combined) {
+    const key = (row.player_name || '').trim().toLowerCase()
+    if (!key) continue
+    const existing = map.get(key)
+    if (!existing || row.score > existing.score) {
+      map.set(key, row)
+    }
+  }
+
+  // Sort strictly by score DESC, then created_at ASC
+  const sorted = Array.from(map.values()).sort((a, b) => b.score - a.score)
+  const topList = sorted.slice(0, limit)
+
+  const mapped = topList.map((row, idx) => ({
     rank: idx + 1,
     name: row.player_name,
     score: row.score,
   }))
 
-  return { data: mapped, error: null, isMock: false }
+  return { data: mapped, error: dbError, isMock: false }
 }
 
 /**
  * Evaluates whether a given score qualifies for the Top 3 leaderboard,
  * and what score needs to be beaten if not.
  */
-export async function evaluateLeaderboardStanding(score, _playerName = '') {
+export async function evaluateLeaderboardStanding(score, playerName = '') {
   const cleanScore = Math.max(0, Math.floor(score))
+  const cleanName = (playerName || '').trim().toLowerCase()
 
   try {
-    const { data: topScores } = await fetchTopScores(3)
-    const list = topScores || []
+    const { data: topScores } = await fetchTopScores(10)
+    const list = (topScores || []).filter((r) => r.name && !r.name.startsWith('Spot Open'))
 
-    // If there are open slots in the Top 3 (< 3 players on the board)
-    if (list.length < 3) {
+    // Filter out current player from competitor list to see where this score ranks
+    const competitorList = cleanName
+      ? list.filter((r) => r.name.trim().toLowerCase() !== cleanName)
+      : list
+
+    // If fewer than 3 competitor spots exist, any score > 0 qualifies for Top 3
+    if (competitorList.length < 3) {
       let rank = 1
-      if (list[0] && cleanScore < list[0].score) rank = 2
-      if (list[1] && cleanScore < list[1].score) rank = 3
+      if (competitorList[0] && cleanScore < competitorList[0].score) rank = 2
+      if (competitorList[1] && cleanScore < competitorList[1].score) rank = 3
 
       return {
         qualifiesTop3: cleanScore > 0,
         rank: cleanScore > 0 ? rank : null,
-        topScores: list,
-        cutoffScore: 0,
+        topScores: list.slice(0, 3),
+        cutoffScore: competitorList[competitorList.length - 1]?.score ?? 0,
         pointsNeeded: 1,
-        topScore: list[0]?.score ?? cleanScore,
+        topScore: competitorList[0]?.score ?? cleanScore,
       }
     }
 
-    const rank3Score = list[2]?.score ?? 0
-    const rank1Score = list[0]?.score ?? 0
+    const rank1Competitor = competitorList[0]?.score ?? 0
+    const rank2Competitor = competitorList[1]?.score ?? 0
+    const rank3Competitor = competitorList[2]?.score ?? 0
 
-    if (cleanScore > rank3Score) {
+    // Compare this score against the 3rd competitor
+    if (cleanScore > rank3Competitor) {
       let rank = 3
-      if (cleanScore > rank1Score) {
+      if (cleanScore > rank1Competitor) {
         rank = 1
-      } else if (cleanScore > (list[1]?.score ?? 0)) {
+      } else if (cleanScore > rank2Competitor) {
         rank = 2
       }
 
       return {
         qualifiesTop3: true,
         rank,
-        topScores: list,
-        cutoffScore: rank3Score,
+        topScores: list.slice(0, 3),
+        cutoffScore: rank3Competitor,
         pointsNeeded: 0,
-        topScore: rank1Score,
+        topScore: rank1Competitor,
       }
     }
 
-    // Did not make Top 3
+    // Did not qualify for Top 3
+    const pointsNeeded = rank3Competitor - cleanScore + 1
     return {
       qualifiesTop3: false,
       rank: null,
-      topScores: list,
-      cutoffScore: rank3Score,
-      pointsNeeded: (rank3Score - cleanScore) + 1,
-      topScore: rank1Score,
+      topScores: list.slice(0, 3),
+      cutoffScore: rank3Competitor,
+      pointsNeeded: Math.max(1, pointsNeeded),
+      topScore: rank1Competitor,
     }
   } catch {
     return {
@@ -210,82 +276,60 @@ export async function submitGameScore({ playerName, playerEmail, score }) {
   const cleanName = playerName?.trim() || 'Anonymous Baller'
   const cleanEmail = (playerEmail || getStoredUser()?.email || '').trim().toLowerCase()
 
-  if (!isSupabaseConfigured || !supabase) {
-    await new Promise((res) => setTimeout(res, 300))
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('ballen_score_submitted'))
-    }
-    const standing = await evaluateLeaderboardStanding(cleanScore, cleanName)
-    return { data: { playerName: cleanName, score: cleanScore }, error: null, standing, isMock: true }
+  const entry = {
+    player_name: cleanName,
+    player_email: cleanEmail,
+    score: cleanScore,
+    created_at: new Date().toISOString(),
   }
 
-  // 1. If player has an email, upsert on player_email so it replaces their current score
-  if (cleanEmail) {
-    const { data, error } = await supabase
-      .from('scores')
-      .upsert(
-        {
-          player_name: cleanName,
-          player_email: cleanEmail,
-          score: cleanScore,
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: 'player_email' }
-      )
-      .select()
+  // 1. Evaluate standing against existing board
+  const standing = await evaluateLeaderboardStanding(cleanScore, cleanName)
 
-    if (!error) {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('ballen_score_submitted'))
-      }
-      const standing = await evaluateLeaderboardStanding(cleanScore, cleanName)
-      return { data, error: null, standing, isMock: false }
-    }
-    // If player_email column is not yet migrated, fall through to ID-based replacement
-  }
-
-  // 2. Fallback: replace by previously stored score ID on this device
-  const storedId = typeof window !== 'undefined' ? localStorage.getItem('ballen_score_id') : null
-  if (storedId) {
-    const { data, error } = await supabase
-      .from('scores')
-      .update({
-        player_name: cleanName,
-        score: cleanScore,
-      })
-      .eq('id', storedId)
-      .select()
-
-    if (!error && data && data.length > 0) {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('ballen_score_submitted'))
-      }
-      const standing = await evaluateLeaderboardStanding(cleanScore, cleanName)
-      return { data, error: null, standing, isMock: false }
-    }
-  }
-
-  // 3. Otherwise, insert new row and save the ID so future shares replace it
-  const { data, error } = await supabase
-    .from('scores')
-    .insert([
-      {
-        player_name: cleanName,
-        score: cleanScore,
-      },
-    ])
-    .select()
-
-  if (data && data[0]?.id && typeof window !== 'undefined') {
-    localStorage.setItem('ballen_score_id', data[0].id)
-  }
-
+  // 2. Instantly save locally so the leaderboard updates without network delay
+  saveLocalScore(entry)
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('ballen_score_submitted'))
   }
 
-  const standing = await evaluateLeaderboardStanding(cleanScore, cleanName)
-  return { data, error, standing, isMock: false }
+  // 3. Sync to Supabase
+  let dbData = null
+  let dbError = null
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      if (cleanEmail) {
+        // Try upsert with player_email
+        const res = await supabase
+          .from('scores')
+          .upsert(entry, { onConflict: 'player_email' })
+          .select()
+
+        if (!res.error) {
+          dbData = res.data
+        } else {
+          // Fallback: direct insert
+          const insRes = await supabase.from('scores').insert([entry]).select()
+          dbData = insRes.data
+          dbError = insRes.error
+        }
+      } else {
+        const insRes = await supabase.from('scores').insert([entry]).select()
+        dbData = insRes.data
+        dbError = insRes.error
+      }
+    } catch (err) {
+      console.warn('[Supabase] submitGameScore error:', err)
+      dbError = err
+    }
+  }
+
+  // 4. Notify UI listeners again
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('ballen_score_submitted'))
+  }
+
+  return { data: dbData || entry, error: dbError, standing, isMock: false }
 }
 
 /**

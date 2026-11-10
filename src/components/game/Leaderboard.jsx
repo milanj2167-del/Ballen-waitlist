@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { fetchTopScores, subscribeToLeaderboard, isSupabaseConfigured, getStoredUser } from '../../lib/supabase'
+import { fetchTopScores, subscribeToLeaderboard, getStoredUser } from '../../lib/supabase'
 
 const DEMO_ENTRIES = [
   { rank: 1, name: 'Player One', score: 0 },
@@ -14,24 +14,24 @@ export default function Leaderboard() {
   const [isLive, setIsLive] = useState(false)
 
   const loadScores = async () => {
-    if (!isSupabaseConfigured) {
-      return
-    }
-
-    const { data, error } = await fetchTopScores(3)
-    if (!error && data && data.length > 0) {
-      // If we have fewer than 3 records, pad with demo spots
-      const padded = [...data]
-      while (padded.length < 3) {
-        padded.push({
-          rank: padded.length + 1,
-          name: `Spot Open #${padded.length + 1}`,
-          score: 0,
-        })
+    try {
+      const { data } = await fetchTopScores(3)
+      if (data && data.length > 0) {
+        // If we have fewer than 3 records, pad with demo spots
+        const padded = [...data]
+        while (padded.length < 3) {
+          padded.push({
+            rank: padded.length + 1,
+            name: `Spot Open #${padded.length + 1}`,
+            score: 0,
+          })
+        }
+        setEntries(padded)
+        setIsLive(true)
+      } else {
+        setIsLive(false)
       }
-      setEntries(padded)
-      setIsLive(true)
-    } else {
+    } catch {
       setIsLive(false)
     }
   }
@@ -108,11 +108,13 @@ export default function Leaderboard() {
               <td className="px-2 py-3.5">
                 <div className="flex items-center gap-1.5 font-semibold text-ink text-sm sm:text-base leading-snug">
                   <span>{e.name}</span>
-                  {currentUserName && e.name.trim().toLowerCase() === currentUserName && (
-                    <span className="rounded-full bg-ballen border border-ink px-2 py-0.5 text-[9px] font-black uppercase text-ink shadow-[1px_1px_0_0_#111]">
-                      You
-                    </span>
-                  )}
+                  {currentUserName &&
+                    e.name.trim().toLowerCase() === currentUserName &&
+                    !e.name.startsWith('Spot Open') && (
+                      <span className="rounded-full bg-ballen border border-ink px-2 py-0.5 text-[9px] font-black uppercase text-ink shadow-[1px_1px_0_0_#111]">
+                        You
+                      </span>
+                    )}
                 </div>
                 {e.rank === 1 && (
                   <div className="mt-1">

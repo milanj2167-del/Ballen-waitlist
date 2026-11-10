@@ -5,7 +5,6 @@ import { getPersonalBest, savePersonalBest, getSoundPref, saveSoundPref } from '
 import { getDefeatMessage } from '../../game/messages'
 import CodedHorseMascot from './CodedHorseMascot'
 import WaitlistModal from './WaitlistModal'
-import { submitGameScore, getStoredUser } from '../../lib/supabase'
 import { trackGameStart, trackGameOver, trackShareScore } from '../../lib/analytics'
 
 const prefersReducedMotion = () =>
@@ -174,30 +173,9 @@ export default function FeedTheBoys() {
     setTimeout(() => setToast(''), 2500)
   }
 
-  const handleShareClick = async () => {
-    const storedUser = getStoredUser()
-    const currentScore = result?.score ?? 0
-
-    // Gate sharing behind waitlist registration if not joined yet
-    if (!storedUser?.email) {
-      setIsWaitlistModalOpen(true)
-      return
-    }
-
-    // Already on waitlist: update/replace their current score on the leaderboard
-    setToast('Updating leaderboard...')
-    try {
-      const res = await submitGameScore({
-        playerName: storedUser.name,
-        playerEmail: storedUser.email,
-        score: currentScore,
-      })
-      if (res?.standing) {
-        setStandingFeedback(res.standing)
-      }
-    } catch {}
-
-    await triggerNativeShare(currentScore)
+  const handleShareClick = () => {
+    // Prompt waitlist modal to collect/confirm details and lock in score
+    setIsWaitlistModalOpen(true)
   }
 
   const playing = screen === 'playing'
@@ -399,6 +377,15 @@ export default function FeedTheBoys() {
         onSuccess={(_values, standing) => {
           if (standing) {
             setStandingFeedback(standing)
+            if (standing.qualifiesTop3) {
+              setToast(`🏆 You made Top 3 (Rank #${standing.rank})!`)
+              setTimeout(() => {
+                const el = document.getElementById('leaderboard')
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }, 700)
+            } else {
+              setToast(`⚡ Score saved! Beat ${standing.cutoffScore} pts to make Top 3!`)
+            }
           }
           triggerNativeShare(result?.score ?? 0)
         }}

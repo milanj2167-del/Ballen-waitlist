@@ -227,82 +227,79 @@ export function saveLocalScore(entry) {
 
 /**
  * Fetch top N scores from Supabase ordered by score descending.
+ * Supabase is the single source of truth across all devices.
  */
 export async function fetchTopScores(limit = 3) {
-  let supabaseRows = []
-  let dbError = null
-
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('scores')
-        .select('*')
-        .order('score', { ascending: false })
-        .order('created_at', { ascending: true })
-        .limit(limit * 5)
-
-      if (!error && data) {
-        supabaseRows = data
-      } else if (error) {
-        dbError = error
-      }
-    } catch (e) {
-      dbError = e
-    }
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: [], error: null, isMock: true }
   }
 
-  // When Supabase has scores, use Supabase rows as the single source of truth across all devices!
-  // If Supabase returned 0 rows (e.g. offline/dev), fallback to local rows.
-  const localRows = getLocalScores()
-  const rows = supabaseRows.length > 0 ? supabaseRows : localRows
+  try {
+    const { data, error } = await supabase
+      .from('scores')
+      .select('*')
+      .order('score', { ascending: false })
+      .order('created_at', { ascending: true })
+      .limit(limit * 5)
 
-  // Guarantee each player/account only occupies 1 spot (highest score)
-  // Match by email OR phone OR name
-  const list = []
-  for (const row of rows) {
-    const rEmail = (row.player_email || '').trim().toLowerCase()
-    const rPhone = (row.player_phone || '').replace(/\D/g, '')
-    const rName = (row.player_name || '').trim().toLowerCase()
+    if (error) {
+      console.warn('[Supabase] fetchTopScores error:', error)
+      return { data: [], error, isMock: false }
+    }
 
-    if (!rName && !rEmail && !rPhone) continue
+    const rows = data || []
 
-    const existingIdx = list.findIndex((e) => {
-      const eEmail = (e.player_email || '').trim().toLowerCase()
-      const ePhone = (e.player_phone || '').replace(/\D/g, '')
-      const eName = (e.player_name || '').trim().toLowerCase()
+    // Guarantee each account/player only occupies 1 spot (highest score)
+    // Match by email OR phone OR name
+    const list = []
+    for (const row of rows) {
+      const rEmail = (row.player_email || '').trim().toLowerCase()
+      const rPhone = (row.player_phone || '').replace(/\D/g, '')
+      const rName = (row.player_name || '').trim().toLowerCase()
 
-      if (rEmail && eEmail && rEmail === eEmail) return true
-      if (rPhone && ePhone && rPhone === ePhone) return true
-      if (rName && eName && rName === eName) return true
-      return false
-    })
+      if (!rName && !rEmail && !rPhone) continue
 
-    if (existingIdx === -1) {
-      list.push(row)
-    } else {
-      if ((row.score || 0) > (list[existingIdx].score || 0)) {
-        list[existingIdx] = {
-          ...list[existingIdx],
-          ...row,
-          score: row.score,
+      const existingIdx = list.findIndex((e) => {
+        const eEmail = (e.player_email || '').trim().toLowerCase()
+        const ePhone = (e.player_phone || '').replace(/\D/g, '')
+        const eName = (e.player_name || '').trim().toLowerCase()
+
+        if (rEmail && eEmail && rEmail === eEmail) return true
+        if (rPhone && ePhone && rPhone === ePhone) return true
+        if (rName && eName && rName === eName) return true
+        return false
+      })
+
+      if (existingIdx === -1) {
+        list.push(row)
+      } else {
+        if ((row.score || 0) > (list[existingIdx].score || 0)) {
+          list[existingIdx] = {
+            ...list[existingIdx],
+            ...row,
+            score: row.score,
+          }
         }
       }
     }
+
+    // Sort strictly by score DESC, then created_at ASC
+    list.sort((a, b) => (b.score || 0) - (a.score || 0))
+    const topList = list.slice(0, limit)
+
+    const mapped = topList.map((row, idx) => ({
+      rank: idx + 1,
+      name: row.player_name || 'Anonymous Baller',
+      score: row.score || 0,
+      email: row.player_email || '',
+      phone: row.player_phone || '',
+    }))
+
+    return { data: mapped, error: null, isMock: false }
+  } catch (err) {
+    console.warn('[Supabase] fetchTopScores caught error:', err)
+    return { data: [], error: err, isMock: false }
   }
-
-  // Sort strictly by score DESC, then created_at ASC
-  list.sort((a, b) => (b.score || 0) - (a.score || 0))
-  const topList = list.slice(0, limit)
-
-  const mapped = topList.map((row, idx) => ({
-    rank: idx + 1,
-    name: row.player_name || 'Anonymous Baller',
-    score: row.score || 0,
-    email: row.player_email || '',
-    phone: row.player_phone || '',
-  }))
-
-  return { data: mapped, error: dbError, isMock: false }
 }
 
 /**
@@ -393,6 +390,7 @@ export async function submitGameScore({ playerName, playerEmail, playerPhone, sc
   const cleanName = playerName?.trim() || storedUser?.name || 'Anonymous Baller'
   const cleanEmail = (playerEmail || storedUser?.email || '').trim().toLowerCase()
   const cleanPhone = (playerPhone || storedUser?.phone || '').trim()
+  const cleanPhoneDigits = cleanPhone.replace(/\D/g, '')
 
   const entry = {
     player_name: cleanName,
@@ -405,13 +403,7 @@ export async function submitGameScore({ playerName, playerEmail, playerPhone, sc
   // 1. Evaluate standing against existing board
   const standing = await evaluateLeaderboardStanding(cleanScore, cleanName)
 
-  // 2. Instantly save locally so the leaderboard updates without network delay
-  saveLocalScore(entry)
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event('ballen_score_submitted'))
-  }
-
-  // 3. Sync to Supabase: Find existing record by email, phone, or name
+  // 2. Sync to Supabase: Find existing record by email, phone, or name
   let dbData = null
   let dbError = null
 
@@ -419,24 +411,22 @@ export async function submitGameScore({ playerName, playerEmail, playerPhone, sc
     try {
       let existingRecord = null
 
-      // A. Try searching by email or phone
-      if (cleanEmail || cleanPhone) {
+      // A. Try searching by email or phone digits
+      if (cleanEmail || cleanPhoneDigits) {
         try {
           let query = supabase.from('scores').select('*')
-          if (cleanEmail && cleanPhone) {
-            query = query.or(`player_email.eq.${cleanEmail},player_phone.eq.${cleanPhone}`)
+          if (cleanEmail && cleanPhoneDigits) {
+            query = query.or(`player_email.ilike.${cleanEmail},player_phone.ilike.*${cleanPhoneDigits.slice(-10)}*`)
           } else if (cleanEmail) {
-            query = query.eq('player_email', cleanEmail)
+            query = query.ilike('player_email', cleanEmail)
           } else {
-            query = query.eq('player_phone', cleanPhone)
+            query = query.ilike('player_phone', `*${cleanPhoneDigits.slice(-10)}*`)
           }
-          const { data: matches, error: qErr } = await query.limit(1)
-          if (!qErr && matches && matches.length > 0) {
+          const { data: matches } = await query.limit(1)
+          if (matches && matches.length > 0) {
             existingRecord = matches[0]
           }
-        } catch {
-          // In case player_email or player_phone column does not exist yet
-        }
+        } catch {}
       }
 
       // B. If not found by email/phone, search by player_name

@@ -110,21 +110,34 @@ export function saveLocalScore(entry) {
   if (typeof window === 'undefined') return
   try {
     const existing = getLocalScores()
-    const cleanEntryName = entry.player_name.trim().toLowerCase()
+    const cleanEntryName = (entry.player_name || '').trim().toLowerCase()
+    const cleanEntryEmail = (entry.player_email || '').trim().toLowerCase()
+    const cleanEntryPhone = (entry.player_phone || '').replace(/\D/g, '')
 
-    // If player already has a score locally, keep their highest score
-    const match = existing.find(
-      (e) =>
-        e.player_name.trim().toLowerCase() === cleanEntryName ||
-        (entry.player_email && e.player_email && e.player_email.toLowerCase() === entry.player_email.toLowerCase())
-    )
-    const bestScore = match ? Math.max(match.score, entry.score) : entry.score
+    // If player already has a score locally, find match by email, phone, or name
+    const match = existing.find((e) => {
+      const eEmail = (e.player_email || '').trim().toLowerCase()
+      const ePhone = (e.player_phone || '').replace(/\D/g, '')
+      const eName = (e.player_name || '').trim().toLowerCase()
 
-    const filtered = existing.filter(
-      (e) =>
-        e.player_name.trim().toLowerCase() !== cleanEntryName &&
-        (!entry.player_email || !e.player_email || e.player_email.toLowerCase() !== entry.player_email.toLowerCase())
-    )
+      if (cleanEntryEmail && eEmail && cleanEntryEmail === eEmail) return true
+      if (cleanEntryPhone && ePhone && cleanEntryPhone === ePhone) return true
+      if (cleanEntryName && eName && cleanEntryName === eName) return true
+      return false
+    })
+
+    const bestScore = match ? Math.max(match.score || 0, entry.score || 0) : entry.score
+
+    const filtered = existing.filter((e) => {
+      const eEmail = (e.player_email || '').trim().toLowerCase()
+      const ePhone = (e.player_phone || '').replace(/\D/g, '')
+      const eName = (e.player_name || '').trim().toLowerCase()
+
+      if (cleanEntryEmail && eEmail && cleanEntryEmail === eEmail) return false
+      if (cleanEntryPhone && ePhone && cleanEntryPhone === ePhone) return false
+      if (cleanEntryName && eName && cleanEntryName === eName) return false
+      return true
+    })
 
     filtered.push({
       ...entry,
@@ -146,10 +159,10 @@ export async function fetchTopScores(limit = 3) {
     try {
       const { data, error } = await supabase
         .from('scores')
-        .select('id, player_name, score, created_at')
+        .select('*')
         .order('score', { ascending: false })
         .order('created_at', { ascending: true })
-        .limit(limit * 4)
+        .limit(limit * 5)
 
       if (!error && data) {
         supabaseRows = data
@@ -165,25 +178,50 @@ export async function fetchTopScores(limit = 3) {
   const localRows = getLocalScores()
   const combined = [...localRows, ...supabaseRows]
 
-  // Guarantee each player only occupies 1 spot (highest score)
-  const map = new Map()
+  // Guarantee each player/account only occupies 1 spot (highest score)
+  // Match by email OR phone OR name
+  const list = []
   for (const row of combined) {
-    const key = (row.player_name || '').trim().toLowerCase()
-    if (!key) continue
-    const existing = map.get(key)
-    if (!existing || row.score > existing.score) {
-      map.set(key, row)
+    const rEmail = (row.player_email || '').trim().toLowerCase()
+    const rPhone = (row.player_phone || '').replace(/\D/g, '')
+    const rName = (row.player_name || '').trim().toLowerCase()
+
+    if (!rName && !rEmail && !rPhone) continue
+
+    const existingIdx = list.findIndex((e) => {
+      const eEmail = (e.player_email || '').trim().toLowerCase()
+      const ePhone = (e.player_phone || '').replace(/\D/g, '')
+      const eName = (e.player_name || '').trim().toLowerCase()
+
+      if (rEmail && eEmail && rEmail === eEmail) return true
+      if (rPhone && ePhone && rPhone === ePhone) return true
+      if (rName && eName && rName === eName) return true
+      return false
+    })
+
+    if (existingIdx === -1) {
+      list.push(row)
+    } else {
+      if ((row.score || 0) > (list[existingIdx].score || 0)) {
+        list[existingIdx] = {
+          ...list[existingIdx],
+          ...row,
+          score: row.score,
+        }
+      }
     }
   }
 
   // Sort strictly by score DESC, then created_at ASC
-  const sorted = Array.from(map.values()).sort((a, b) => b.score - a.score)
-  const topList = sorted.slice(0, limit)
+  list.sort((a, b) => (b.score || 0) - (a.score || 0))
+  const topList = list.slice(0, limit)
 
   const mapped = topList.map((row, idx) => ({
     rank: idx + 1,
-    name: row.player_name,
-    score: row.score,
+    name: row.player_name || 'Anonymous Baller',
+    score: row.score || 0,
+    email: row.player_email || '',
+    phone: row.player_phone || '',
   }))
 
   return { data: mapped, error: dbError, isMock: false }
@@ -269,16 +307,19 @@ export async function evaluateLeaderboardStanding(score, playerName = '') {
 
 /**
  * Submit or REPLACE a game score on the leaderboard.
- * Each player replaces their previous score with their current one.
+ * Keeps scores saved per account (email or phone or name).
  */
-export async function submitGameScore({ playerName, playerEmail, score }) {
+export async function submitGameScore({ playerName, playerEmail, playerPhone, score }) {
   const cleanScore = Math.max(0, Math.floor(score))
-  const cleanName = playerName?.trim() || 'Anonymous Baller'
-  const cleanEmail = (playerEmail || getStoredUser()?.email || '').trim().toLowerCase()
+  const storedUser = getStoredUser()
+  const cleanName = playerName?.trim() || storedUser?.name || 'Anonymous Baller'
+  const cleanEmail = (playerEmail || storedUser?.email || '').trim().toLowerCase()
+  const cleanPhone = (playerPhone || storedUser?.phone || '').trim()
 
   const entry = {
     player_name: cleanName,
     player_email: cleanEmail,
+    player_phone: cleanPhone,
     score: cleanScore,
     created_at: new Date().toISOString(),
   }
@@ -292,29 +333,91 @@ export async function submitGameScore({ playerName, playerEmail, score }) {
     window.dispatchEvent(new Event('ballen_score_submitted'))
   }
 
-  // 3. Sync to Supabase
+  // 3. Sync to Supabase: Find existing record by email, phone, or name
   let dbData = null
   let dbError = null
 
   if (isSupabaseConfigured && supabase) {
     try {
-      if (cleanEmail) {
-        // Try upsert with player_email
-        const res = await supabase
+      let existingRecord = null
+
+      // A. Try searching by email or phone
+      if (cleanEmail || cleanPhone) {
+        try {
+          let query = supabase.from('scores').select('*')
+          if (cleanEmail && cleanPhone) {
+            query = query.or(`player_email.eq.${cleanEmail},player_phone.eq.${cleanPhone}`)
+          } else if (cleanEmail) {
+            query = query.eq('player_email', cleanEmail)
+          } else {
+            query = query.eq('player_phone', cleanPhone)
+          }
+          const { data: matches, error: qErr } = await query.limit(1)
+          if (!qErr && matches && matches.length > 0) {
+            existingRecord = matches[0]
+          }
+        } catch {
+          // In case player_email or player_phone column does not exist yet
+        }
+      }
+
+      // B. If not found by email/phone, search by player_name
+      if (!existingRecord && cleanName) {
+        try {
+          const { data: nameMatches, error: nErr } = await supabase
+            .from('scores')
+            .select('*')
+            .eq('player_name', cleanName)
+            .limit(1)
+          if (!nErr && nameMatches && nameMatches.length > 0) {
+            existingRecord = nameMatches[0]
+          }
+        } catch {}
+      }
+
+      // C. Update existing record if found, or insert new
+      if (existingRecord) {
+        const newBestScore = Math.max(existingRecord.score || 0, cleanScore)
+        const updatePayload = {
+          score: newBestScore,
+          player_name: cleanName,
+          player_email: cleanEmail || existingRecord.player_email,
+          player_phone: cleanPhone || existingRecord.player_phone,
+        }
+
+        // Try full update
+        let upRes = await supabase
           .from('scores')
-          .upsert(entry, { onConflict: 'player_email' })
+          .update(updatePayload)
+          .eq('id', existingRecord.id)
           .select()
 
-        if (!res.error) {
-          dbData = res.data
-        } else {
-          // Fallback: direct insert
-          const insRes = await supabase.from('scores').insert([entry]).select()
-          dbData = insRes.data
-          dbError = insRes.error
+        // If unknown column error, fallback to basic update
+        if (upRes.error) {
+          upRes = await supabase
+            .from('scores')
+            .update({ score: newBestScore, player_name: cleanName })
+            .eq('id', existingRecord.id)
+            .select()
         }
+
+        dbData = upRes.data
+        dbError = upRes.error
       } else {
-        const insRes = await supabase.from('scores').insert([entry]).select()
+        // Insert new score record
+        let insRes = await supabase
+          .from('scores')
+          .insert([entry])
+          .select()
+
+        // If unknown column error, fallback to basic insert
+        if (insRes.error) {
+          insRes = await supabase
+            .from('scores')
+            .insert([{ player_name: cleanName, score: cleanScore }])
+            .select()
+        }
+
         dbData = insRes.data
         dbError = insRes.error
       }

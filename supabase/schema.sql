@@ -34,13 +34,15 @@ create policy "Allow anonymous waitlist update on email match"
 create table if not exists public.scores (
   id uuid primary key default gen_random_uuid(),
   player_name text not null,
-  player_email text unique,
+  player_email text,
+  player_phone text,
   score integer not null check (score >= 0),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- In case table already exists without player_email:
-alter table public.scores add column if not exists player_email text unique;
+-- In case table already exists without player_email or player_phone:
+alter table public.scores add column if not exists player_email text;
+alter table public.scores add column if not exists player_phone text;
 
 -- Indexes for lightning-fast leaderboard queries
 create index if not exists scores_score_idx on public.scores (score desc, created_at asc);

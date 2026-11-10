@@ -2,23 +2,23 @@
 export const DEFEAT_MESSAGES = {
   sweat: {
     icon: '💦',
-    message: 'You lost to sweat, so join the waitlist to win over the problem in real life.',
+    message: 'You lost to sweat.',
   },
   germ: {
     icon: '🦠',
-    message: 'You lost to bacteria, so join the waitlist to win over the problem in real life.',
+    message: 'You lost to bacteria.',
   },
   stink: {
     icon: '🦨',
-    message: 'You lost to odor, so join the waitlist to win over the problem in real life.',
+    message: 'You lost to odor.',
   },
   heat: {
     icon: '🔥',
-    message: 'You lost to heat, so join the waitlist to win over the problem in real life.',
+    message: 'You lost to heat.',
   },
   itch: {
     icon: '⚡',
-    message: 'You lost to itch, so join the waitlist to win over the problem in real life.',
+    message: 'You lost to itch.',
   },
 }
 

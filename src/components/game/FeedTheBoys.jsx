@@ -329,27 +329,13 @@ export default function FeedTheBoys() {
               </div>
               <p className="mt-1 font-fun text-xs font-semibold leading-snug text-paper">
                 {standingFeedback.qualifiesTop3 ? (
-                  standingFeedback.rank === 1
-                    ? "Holding the top spot for the launch giveaway!"
-                    : `Live on the board! Beat ${standingFeedback.topScore} to take #1!`
+                  "Stay updated to defend your position."
                 ) : (
                   <>
-                    You scored <strong className="text-ballen">{result.score}</strong>. To get on the live leaderboard, you must beat the Top 3 score of <strong className="text-paper">{standingFeedback.cutoffScore}</strong> (<span className="text-amber-300 font-bold">+{standingFeedback.pointsNeeded} pts</span> needed)!
+                    You scored <strong className="text-ballen">{result.score}</strong>. Beat the Top 3 score of <strong className="text-paper">{standingFeedback.cutoffScore}</strong> (<span className="text-amber-300 font-bold">+{standingFeedback.pointsNeeded} pts</span> needed) to make the board!
                   </>
                 )}
               </p>
-              {standingFeedback.qualifiesTop3 ? (
-                <a
-                  href="#leaderboard"
-                  className="mt-1.5 inline-block text-[11px] font-bold uppercase tracking-wider text-ballen underline underline-offset-2 hover:text-paper"
-                >
-                  View live leaderboard ↓
-                </a>
-              ) : (
-                <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-ballen">
-                  Play again to beat the top scores and claim your spot!
-                </p>
-              )}
             </div>
           )}
 

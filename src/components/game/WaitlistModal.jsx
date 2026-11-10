@@ -71,6 +71,7 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
       const scoreRes = await submitGameScore({
         playerName: values.name.trim(),
         playerEmail: values.email.trim(),
+        playerPhone: values.phone.trim(),
         score,
       })
 
@@ -86,6 +87,7 @@ export default function WaitlistModal({ isOpen, onClose, score, onSuccess }) {
         const scoreRes = await submitGameScore({
           playerName: values.name.trim(),
           playerEmail: values.email.trim(),
+          playerPhone: values.phone.trim(),
           score,
         })
         onSuccess?.(values, scoreRes?.standing)

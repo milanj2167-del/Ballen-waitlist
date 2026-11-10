@@ -39,16 +39,21 @@ export default function Leaderboard() {
   useEffect(() => {
     loadScores()
 
+    // Refresh when tab gains focus or returns to foreground
+    const onFocus = () => loadScores()
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+
     // Listen for custom score-submitted event from game on same page
     const handleLocalSubmit = () => {
       loadScores()
     }
     window.addEventListener('ballen_score_submitted', handleLocalSubmit)
 
-    // Periodic live refresh every 10 seconds for real-time multiplayer updates
+    // Live refresh every 3 seconds for fast multiplayer updates across all devices
     const pollId = setInterval(() => {
       loadScores()
-    }, 10000)
+    }, 3000)
 
     // Listen for Supabase Realtime changes across any client
     const unsubscribe = subscribeToLeaderboard(() => {
@@ -56,6 +61,8 @@ export default function Leaderboard() {
     })
 
     return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
       window.removeEventListener('ballen_score_submitted', handleLocalSubmit)
       clearInterval(pollId)
       unsubscribe()
@@ -65,6 +72,8 @@ export default function Leaderboard() {
   const topEntries = entries.slice(0, 3)
   const storedUser = typeof window !== 'undefined' ? getStoredUser() : null
   const currentUserName = (storedUser?.name || '').trim().toLowerCase()
+  const currentUserEmail = (storedUser?.email || '').trim().toLowerCase()
+  const currentUserPhone = (storedUser?.phone || '').replace(/\D/g, '')
 
   return (
     <div id="leaderboard" className="scroll-mt-28 w-full max-w-full overflow-hidden rounded-[24px] border-[3px] border-ink bg-paper shadow-[4px_4px_0_0_#111] sm:rounded-[28px] sm:shadow-hard">
@@ -108,13 +117,18 @@ export default function Leaderboard() {
               <td className="px-2 py-3.5">
                 <div className="flex items-center gap-1.5 font-semibold text-ink text-sm sm:text-base leading-snug">
                   <span>{e.name}</span>
-                  {currentUserName &&
-                    e.name.trim().toLowerCase() === currentUserName &&
-                    !e.name.startsWith('Spot Open') && (
+                  {(() => {
+                    const isMe =
+                      !e.name.startsWith('Spot Open') &&
+                      ((currentUserName && e.name.trim().toLowerCase() === currentUserName) ||
+                        (currentUserEmail && e.email && e.email.trim().toLowerCase() === currentUserEmail) ||
+                        (currentUserPhone && e.phone && e.phone.replace(/\D/g, '') === currentUserPhone))
+                    return isMe ? (
                       <span className="rounded-full bg-ballen border border-ink px-2 py-0.5 text-[9px] font-black uppercase text-ink shadow-[1px_1px_0_0_#111]">
                         You
                       </span>
-                    )}
+                    ) : null
+                  })()}
                 </div>
                 {e.rank === 1 && (
                   <div className="mt-1">

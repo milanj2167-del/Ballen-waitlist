@@ -10,7 +10,8 @@
  */
 
 const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID || 'G-809MTE0V8P'
-const META_PIXEL_ID = import.meta.env.VITE_META_PIXEL_ID || ''
+const DEFAULT_META_PIXEL_ID = '1128590083487681'
+const META_PIXEL_ID = import.meta.env.VITE_META_PIXEL_ID || DEFAULT_META_PIXEL_ID
 
 let isInitialized = false
 
@@ -74,10 +75,10 @@ function initMetaPixel(pixelId) {
     img.src = `https://www.facebook.com/tr?id=${pixelId}&ev=PageView&noscript=1`
     noscript.appendChild(img)
     document.body.appendChild(noscript)
-  }
 
-  window.fbq('init', pixelId)
-  window.fbq('track', 'PageView')
+    window.fbq('init', pixelId)
+    window.fbq('track', 'PageView')
+  }
 }
 
 /**
@@ -153,6 +154,30 @@ export function trackWaitlistLead({ guess, source = 'landing_page' } = {}) {
       source,
     }
   )
+
+  // Also trigger CompleteRegistration for Meta ad campaigns targeting registrations
+  if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
+    window.fbq('track', 'CompleteRegistration', {
+      content_name: 'Ballen VIP Waitlist',
+      status: 'submitted',
+    })
+  }
+}
+
+/**
+ * Track client-side page views (SPA transitions)
+ */
+export function trackPageView(path = typeof window !== 'undefined' ? window.location.pathname : '/') {
+  try {
+    if (typeof window !== 'undefined') {
+      if (typeof window.gtag === 'function' && GA_ID) {
+        window.gtag('config', GA_ID, { page_path: path })
+      }
+      if (typeof window.fbq === 'function') {
+        window.fbq('track', 'PageView')
+      }
+    }
+  } catch {}
 }
 
 /**

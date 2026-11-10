@@ -8,7 +8,7 @@ import Footer from './sections/Footer'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import ContestTerms from './pages/ContestTerms'
 import ErrorBoundary from './components/ErrorBoundary'
-import { initAnalytics } from './lib/analytics'
+import { initAnalytics, trackPageView } from './lib/analytics'
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(() => {
@@ -22,7 +22,9 @@ export default function App() {
     initAnalytics()
 
     const onPop = () => {
-      setCurrentPath(window.location.pathname.replace(/\/+$/, '') || '/')
+      const next = window.location.pathname.replace(/\/+$/, '') || '/'
+      setCurrentPath(next)
+      trackPageView(next)
     }
     window.addEventListener('popstate', onPop)
 
@@ -66,6 +68,7 @@ export default function App() {
           if (window.location.pathname !== targetPath || hashPart) {
             window.history.pushState({}, '', href)
             setCurrentPath(targetPath)
+            trackPageView(targetPath)
             if (hashPart) {
               setTimeout(() => {
                 const target = document.getElementById(hashPart)

@@ -36,7 +36,7 @@ export default function Game() {
               <FeedTheBoys />
             </GameContainer>
             <p className="mt-3 text-center font-fun text-[11px] font-semibold text-ink/65 sm:text-xs">
-              Free to play. 18+ and India only. Rank 1st to win a free Ballen Daily Comfort Cream.{' '}
+              Free to play. India only. Rank 1st to win a free Ballen Daily Comfort Cream.{' '}
               <a href="/contest-terms" className="underline font-bold text-ink hover:text-ballen-shade">
                 See Contest Terms.
               </a>
@@ -94,7 +94,7 @@ export default function Game() {
               </div>
 
               <p className="mt-4 border-t border-ink/20 pt-3 text-center font-fun text-xs font-semibold text-ink/80">
-                Free to play. 18+ and India only. Rank 1st to win a free Ballen Daily Comfort Cream.{' '}
+                Free to play. India only. Rank 1st to win a free Ballen Daily Comfort Cream.{' '}
                 <a href="/contest-terms" className="underline font-bold text-ink hover:text-ink/70">
                   See Contest Terms.
                 </a>

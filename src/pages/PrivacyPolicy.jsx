@@ -28,7 +28,7 @@ export default function PrivacyPolicy() {
 
         <div className="mt-8 space-y-8 font-fun text-sm font-medium leading-relaxed text-ink/90 sm:text-base">
           <p>
-            Ballen (&ldquo;Ballen&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) is a partnership firm with its registered address at [REGISTERED ADDRESS]. This policy explains how we collect and use your personal data when you visit this website, play our game and join our waitlist. We handle your data in line with the Digital Personal Data Protection Act, 2023 and other applicable Indian laws.
+            Ballen (&ldquo;Ballen&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) is a partnership firm with its registered office in Bengaluru, Karnataka, India. This policy explains how we collect and use your personal data when you visit this website, play our game and join our waitlist. We handle your data in line with the Digital Personal Data Protection Act, 2023 and other applicable Indian laws.
           </p>
 
           <section className="rounded-2xl border-2 border-ink bg-ballen/10 p-5 shadow-[3px_3px_0_0_#111]">
@@ -107,10 +107,10 @@ export default function PrivacyPolicy() {
 
           <section>
             <h2 className="font-display text-xl uppercase tracking-wide text-ink sm:text-2xl">
-              7. Age
+              7. Minor protection
             </h2>
             <p className="mt-3 text-ink/85">
-              This website and our waitlist are only for people aged 18 and above. We do not knowingly collect data from anyone under 18. If you think a minor has given us their data, email us and we will delete it.
+              We do not knowingly collect personal data from minors. If you believe a minor has provided us with their details, please email us and we will delete them promptly.
             </p>
           </section>
 
@@ -141,7 +141,7 @@ export default function PrivacyPolicy() {
               <p>
                 Email: <a href="mailto:Ballenindia@gmail.com" className="text-ballen underline hover:text-paper">Ballenindia@gmail.com</a>
               </p>
-              <p>Address: [REGISTERED ADDRESS]</p>
+              <p>Address: Bengaluru, Karnataka, India</p>
             </div>
           </section>
         </div>

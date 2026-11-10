@@ -45,7 +45,7 @@ export default function ContestTerms() {
               2. Who can enter
             </h2>
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-ink/85">
-              <li>You must be 18 years or older and a resident of India.</li>
+              <li>You must be a resident of India.</li>
               <li>You must give correct details (name, phone number and email) when you join the waitlist.</li>
               <li>Ballen's partners, team members and their immediate family cannot win.</li>
             </ul>

@@ -3,15 +3,47 @@ import { createClient } from '@supabase/supabase-js'
 const DEFAULT_SUPABASE_URL = 'https://wcymvkwrpdbuofaysjoi.supabase.co'
 const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_-sddQiHNwpdgXmLst3ff_Q_QcNHchj3'
 
-const supabaseUrl =
+function sanitizeSupabaseUrl(url) {
+  if (!url) return DEFAULT_SUPABASE_URL
+  // Strip out brackets, quotes, whitespace
+  let clean = url.replace(/[\[\]"'\s]/g, '')
+  // Fix transposition typo 'kwpr' -> 'kwrp'
+  if (clean.includes('wcymvkwprdbuofaysjoi')) {
+    clean = clean.replace('wcymvkwprdbuofaysjoi', 'wcymvkwrpdbuofaysjoi')
+  }
+  try {
+    const parsed = new URL(clean)
+    if (parsed.protocol === 'https:' && parsed.hostname.endsWith('supabase.co')) {
+      return clean
+    }
+  } catch {}
+  return DEFAULT_SUPABASE_URL
+}
+
+function sanitizeSupabaseKey(key) {
+  if (!key) return DEFAULT_SUPABASE_ANON_KEY
+  let clean = key.replace(/[\[\]"'\s]/g, '')
+  if (clean.includes('sddQ1hN')) {
+    clean = clean.replace('sddQ1hN', 'sddQiHN')
+  }
+  if (clean.length < 20 || clean === 'your-anon-key') {
+    return DEFAULT_SUPABASE_ANON_KEY
+  }
+  return clean
+}
+
+const rawUrl =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
   (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) ||
   DEFAULT_SUPABASE_URL
 
-const supabaseAnonKey =
+const rawKey =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) ||
   (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) ||
   DEFAULT_SUPABASE_ANON_KEY
+
+const supabaseUrl = sanitizeSupabaseUrl(rawUrl)
+const supabaseAnonKey = sanitizeSupabaseKey(rawKey)
 
 let client = null
 let configured = false
